@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <random>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -34,37 +35,88 @@ void minimizer_cpu(const uint64_t *input_minimizers, uint64_t *output_hashes, un
         output_hashes[idx] = output_data;
     }
 }
-
 int main() {
     std::cout << "=====================================\n";
-    std::cout << "  Test CPU : Minimizer Hash \n";
+    std::cout << "  Test CPU : Minimizer Hash\n";
     std::cout << "=====================================\n";
 
-    std::vector<uint64_t> minimizers(NUM_WORDS);
-    std::vector<uint64_t> hashes(NUM_WORDS);
+    int nTests = 64;
 
-    std::cout << " Génération de données aléatoires...\n";
+    uint64_t nElements = (32ull * 1024 * 1024) / sizeof(uint64_t);
+
+    std::vector<uint64_t> minimizers(nElements);
+    std::vector<uint64_t> hashes(nElements);
+
     std::mt19937_64 gen(42);
     std::uniform_int_distribution<uint64_t> dis(0, UINT64_MAX);
     for (auto &v : minimizers) {
         v = dis(gen);
     }
 
-    auto start = std::chrono::high_resolution_clock::now();
-    minimizer_cpu(minimizers.data(), hashes.data(), NUM_WORDS);
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
+    std::vector<double> durations_us;
+    durations_us.reserve(nTests);
 
-    double time_s = elapsed.count();
-    double total_hashes = static_cast<double>(NUM_WORDS);
-    double hashes_per_s = total_hashes / time_s;
-    double mhash_per_s = hashes_per_s / 1e6;
-    double mb_per_s = (DATA_SIZE_BYTES / (1024.0 * 1024.0)) / time_s;
+    for (int tt = 0; tt < nTests; tt++) {
+        auto start = std::chrono::high_resolution_clock::now();
+        
+        minimizer_cpu(minimizers.data(), hashes.data(), nElements);
+        minimizers[rand() % nElements] = hashes[rand() % nElements];
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        double time_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        durations_us.push_back(time_us);
+    }
 
-    std::cout << "[CPU] Terminé ✅\n";
-    std::cout << "Temps total : " << time_s << " s\n";
-    std::cout << "Débit : " << mhash_per_s << " M hash/s\n";
-    std::cout << "Vitesse : " << mb_per_s << " MB/s\n";
+    std::sort(durations_us.begin(), durations_us.end());
+    double time_min = durations_us.front() / 1e6;       
+    double time_max = durations_us.back() / 1e6;
+    double time_median = durations_us[durations_us.size() / 2] / 1e6;
+    double time_mean = (std::accumulate(durations_us.begin(), durations_us.end(), 0.0) / durations_us.size()) / 1e6;
+
+    double total_hashes = nElements;
+    double hashes_per_s = total_hashes / time_median;
+    double mhash_per_s  = hashes_per_s / 1e6;
+    double mb_per_s     = (nElements * sizeof(uint64_t)) / (1024.0 * 1024.0) / time_median;
+
+    std::cout << "Terminé ✅  "
+              << " | t_min : " << time_min << " s"
+              << " | t_med : " << time_median << " s"
+              << " | t_max : " << time_max << " s"
+              << " | moy : " << time_mean << " s"
+              << " | Débit : " << mhash_per_s << " M hash/s"
+              << " | Vitesse : " << mb_per_s << " MB/s"
+              << std::endl;
+
     return 0;
 }
 
+
+
+/*
+data (3:0) <= read(3:0)
+write(3:0) <= data(3:0)
+
+data (3:0) <=      read(3:0)
+write(3:0) <= ? ? ? data(0)
+data (2:0) <=      data(3:1)
+
+data (6:3) <= read(3:0)
+write(3:0) <= data(3:0)
+data (2:0) <= data(6:4)
+
+data (6:3) <= read(3:0)
+write(3:0) <= data(3:0)
+data (2:0) <= data(6:4)
+
+data (6:3) <= read(3:0)
+write(3:0) <= data(3:0)
+data (2:0) <= data(6:4)
+
+data (6:3) <= read(3:0)
+write(3:0) <= data(3:0)
+data (2:0) <= data(6:4)
+
+data (6:3) <= read(3:0)
+write(3:0) <= data(3:0)
+data (2:0) <= data(6:4)
+*/
