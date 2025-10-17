@@ -32,7 +32,7 @@ void minimizer(
     #pragma HLS INTERFACE s_axilite port=data_size_words
     #pragma HLS INTERFACE s_axilite port=return
 
-    const unsigned int BURST_SIZE = 16;
+    const unsigned int BURST_SIZE = 1024;
 
     for (unsigned int burst_idx = 0; burst_idx < data_size_words; burst_idx += BURST_SIZE) {
         unsigned int remaining = data_size_words - burst_idx;
